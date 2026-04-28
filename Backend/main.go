@@ -16,6 +16,11 @@ func main() {
 	http.HandleFunc("/expense/delete", handlers.DeleteExpense)
 	http.HandleFunc("/expense/update", handlers.UpdateExpense)
 
+
+	http.HandleFunc("/transaction", handlers.CreateTransaction)
+	http.HandleFunc("/transactions", handlers.GetTransactions)
+	http.HandleFunc("/summary", handlers.GetSummary)
+
 	fmt.Println("🚀 Server running on http://localhost:8080")
 	http.ListenAndServe(":8080", nil)
 }
