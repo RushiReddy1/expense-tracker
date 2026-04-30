@@ -6,6 +6,7 @@ import (
 
 	"expense-tracker-backend/config"
 	"expense-tracker-backend/handlers"
+	"expense-tracker-backend/middleware"
 )
 
 func main() {
@@ -17,9 +18,11 @@ func main() {
 	http.HandleFunc("/expense/update", handlers.UpdateExpense)
 
 
-	http.HandleFunc("/transaction", handlers.CreateTransaction)
-	http.HandleFunc("/transactions", handlers.GetTransactions)
-	http.HandleFunc("/summary", handlers.GetSummary)
+	http.HandleFunc("/transaction", middleware.AuthMiddleware(handlers.CreateTransaction))
+	http.HandleFunc("/transactions", middleware.AuthMiddleware(handlers.GetTransactions))
+	http.HandleFunc("/summary", middleware.AuthMiddleware(handlers.GetSummary))
+	http.HandleFunc("/signup", handlers.Signup)
+	http.HandleFunc("/login", handlers.Login)
 
 	fmt.Println("🚀 Server running on http://localhost:8080")
 	http.ListenAndServe(":8080", nil)

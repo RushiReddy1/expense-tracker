@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"expense-tracker-backend/config"
+	"expense-tracker-backend/models"
 	"fmt"
 	"net/http"
 	"time"
@@ -10,28 +11,34 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 )
 
+// -------------------- CREATE TRANSACTION ---------
 
-// -------------------- CREATE TRANSACTION --------------------
-type Transaction struct {
-	Title     string    `json:"title" bson:"title"`
-	Amount    float64   `json:"amount" bson:"amount"`
-	Type      string    `json:"type" bson:"type"`
-	Source    string    `json:"source" bson:"source"`
-	CreatedAt time.Time `json:"created_at" bson:"created_at"`
-}
+
 func CreateTransaction(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	var tx Transaction
+	var tx models.Transaction
+	if tx.Amount <= 0 {
+	http.Error(w, "Invalid amount", http.StatusBadRequest)
+	return
+}
 
-	err := json.NewDecoder(r.Body).Decode(&tx)
-	if err != nil {
-		http.Error(w, "Invalid body", http.StatusBadRequest)
-		return
-	}
+if tx.Type == "" {
+	http.Error(w, "Type required", http.StatusBadRequest)
+	return
+}
+
+json.NewDecoder(r.Body).Decode(&tx)
+
+
+email := r.Context().Value("userEmail").(string)
+tx.Email = email
+
+// Add timestamp
+tx.CreatedAt = time.Now()
 
 	// Add timestamp (stored correctly as BSON Date)
 	tx.CreatedAt = time.Now()
@@ -40,16 +47,15 @@ func CreateTransaction(w http.ResponseWriter, r *http.Request) {
 		Database("expense_tracker").
 		Collection("transactions")
 
-	_, err = collection.InsertOne(r.Context(), tx)
+	_, err := collection.InsertOne(r.Context(), tx)
 	if err != nil {
 		fmt.Println("DB ERROR:", err)
 		http.Error(w, "Failed to save", http.StatusInternalServerError)
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(tx)
 }
-
 
 // -------------------- GET ALL TRANSACTIONS --------------------
 
@@ -71,10 +77,10 @@ func GetTransactions(w http.ResponseWriter, r *http.Request) {
 	}
 	defer cursor.Close(r.Context())
 
-	var transactions []Transaction
+	var transactions []models.Transaction
 
 	for cursor.Next(r.Context()) {
-		var tx Transaction
+		var tx models.Transaction
 
 		err := cursor.Decode(&tx)
 		if err != nil {
@@ -89,7 +95,6 @@ func GetTransactions(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(transactions)
 }
 
-
 // -------------------- GET SUMMARY --------------------
 
 func GetSummary(w http.ResponseWriter, r *http.Request) {
@@ -97,6 +102,8 @@ func GetSummary(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Only GET allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	email := r.Context().Value("userEmail").(string)
+fmt.Println("Summary user:", email)
 
 	// 1. Read query param
 	monthParam := r.URL.Query().Get("month")
@@ -114,13 +121,16 @@ func GetSummary(w http.ResponseWriter, r *http.Request) {
 		endTime := startTime.AddDate(0, 1, 0)
 
 		filter = bson.M{
+			   "email": email, 
 			"created_at": bson.M{
 				"$gte": startTime,
 				"$lt":  endTime,
 			},
 		}
 	} else {
-		filter = bson.M{}
+		filter = bson.M{
+    "email": email,  
+}
 	}
 
 	collection := config.Client.
@@ -142,12 +152,12 @@ func GetSummary(w http.ResponseWriter, r *http.Request) {
 
 	// 4. Loop through filtered results
 	for cursor.Next(r.Context()) {
-		var tx Transaction
+		var tx models.Transaction
 		cursor.Decode(&tx)
 
 		amount := tx.Amount
 		typeVal := tx.Type
-		
+
 		if typeVal == "expense" {
 			totalExpense += amount
 		} else if typeVal == "investment" {
